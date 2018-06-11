@@ -1,0 +1,102 @@
+---
+title: "Credit_card_transactions_Log_Reg"
+author: "Siddharth Patil"
+date: "May 13, 2018"
+output: html_document
+---
+
+#import the training dataset
+```{r}
+data = read.csv("creditcard.csv", header = T)
+```
+
+#Balancing the dataset
+```{r}
+#oversampling the minority class and undersampling the majority class
+library(ROSE)
+data = ovun.sample(Class ~ ., data = data, method = "both",N = 284807)$data
+
+#plot(as.factor(data$Class)) #plot indicates that balancing is done
+```
+
+#Data normalization
+```{r}
+
+normalize <- function(x) {
+ return ((x - min(x)) / (max(x) - min(x))) }
+ 
+data_norm = as.data.frame(lapply(data, normalize))
+
+data_norm$Class = as.factor(data_norm$Class)
+```
+
+#Variable selection
+```{r}
+log_reg = glm(Class ~ ., data_norm, family = "binomial")
+
+library(broom)
+tm = tidy(log_reg) #data frame with model summary parameters as columns
+
+# get variables with p value less than 0.05
+library(dplyr)
+sign_variables = tm$term[tm$p.value < 0.05] %>% paste(collapse = " + ")
+sign_variables = paste0('Class', ' ~ ', sign_variables)
+sign_variables
+```
+
+#Training and test dataset
+```{r}
+# ## 75% of the sample size
+smp_size = floor(0.75 * nrow(data_norm))
+
+## set the seed to make your partition reproducible
+set.seed(12345)
+train_ind = sample(seq_len(nrow(data_norm)), size = smp_size)
+
+train_data = data_norm[train_ind, ]
+test_data = data_norm[-train_ind, ]
+```
+
+
+#Building a logistic regression model
+```{r}
+log_regr = glm(Class ~ Time + V1 + V2 + V3 + V4 + V5 + V6 + V7 + V8 + V9 + V10 + V11 + V12 + V13 + V14 + V15 + V16 + V17 + V18 + V19 + V20 + V22 + V23 + V24 + V25 + V26 + V27 + V28 + Amount, train_data, family = "binomial")
+
+summary(log_regr)
+```
+
+#Making predicitons for the test data set
+
+```{r}
+test_predictions = predict(log_regr, newdata = test_data, type = "response")
+test_data$predicted.risk = test_predictions
+```
+
+#Confusion matrix
+```{r}
+#Confusion matrix
+library(caret)
+confusionMatrix(table(test_data$Class, as.numeric(test_predictions >= 0.4)))
+
+```
+
+#ROC
+```{r}
+library(ROCR)
+require(ROCR)
+pred = prediction(test_data$predicted.risk, test_data$Class)
+#pred
+as.numeric(performance(pred, "auc")@y.values)
+
+predictTrain = predict(log_regr, type="response")
+#predictTrain
+ROCRpred = prediction(predictTrain, train_data$Class)
+#ROCRpred
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+#ROCRperf
+plot(ROCRperf) 
+plot(ROCRperf, colorize=TRUE)
+
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.3), text.adj=c(-0.2,1.7))
+```
+
